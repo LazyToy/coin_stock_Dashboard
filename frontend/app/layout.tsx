@@ -12,23 +12,13 @@ const inter = Inter({
 });
 
 const theme = createTheme({
-  primaryColor: "violet",
-  fontFamily: "Inter, sans-serif",
-  defaultRadius: "md",
-  colors: {
-    dark: [
-      "#C1C2C5",
-      "#A6A7AB",
-      "#909296",
-      "#5c5f66",
-      "#373A40",
-      "#2C2E33",
-      "#25262B",
-      "#1A1B1E",
-      "#141517",
-      "#101113",
-    ],
+  primaryColor: "blue", // Back to Apple Blue default concept
+  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+  headings: {
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    fontWeight: "600",
   },
+  defaultRadius: "lg", // Larger radius for Apple look
 });
 
 export const metadata: Metadata = {
@@ -45,10 +35,10 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
-        <ColorSchemeScript defaultColorScheme="dark" />
+        <ColorSchemeScript defaultColorScheme="light" />
       </head>
       <body className={`${inter.variable}`}>
-        <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <MantineProvider defaultColorScheme="light" theme={theme}>
           <Notifications position="top-right" />
           {children}
         </MantineProvider>

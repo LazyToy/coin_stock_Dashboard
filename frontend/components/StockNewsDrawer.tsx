@@ -45,39 +45,73 @@ export function StockNewsDrawer({ opened, onClose, stockName }: StockNewsDrawerP
             position="right"
             size="md"
             padding="md"
+            styles={{
+                content: {
+                    background: 'rgba(28, 28, 30, 0.95)',
+                    backdropFilter: 'blur(10px)',
+                    color: '#fff',
+                },
+                header: {
+                    background: 'transparent',
+                    color: '#fff',
+                },
+                close: {
+                    color: '#fff',
+                    '&:hover': { background: 'rgba(255,255,255,0.1)' }
+                }
+            }}
         >
             <ScrollArea h="calc(100vh - 80px)">
                 {loading ? (
                     <Center h={200}>
-                        <Loader variant="bars" />
+                        <Loader variant="bars" color="blue" />
                     </Center>
                 ) : news.length > 0 ? (
                     <Stack gap="md">
-                        {news.map((item, index) => (
-                            <Card
-                                key={index}
-                                withBorder
-                                shadow="sm"
-                                radius="md"
-                                component="a"
-                                href={item.link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="hover:bg-white/5 transition-colors"
-                            >
-                                <Text size="sm" fw={600} mb="xs" lineClamp={2}>
-                                    {item.title}
-                                </Text>
-                                <Group justify="space-between">
-                                    <Text size="xs" c="dimmed">
-                                        {item.source}
+                        {news
+                            .filter(item => {
+                                try {
+                                    // 날짜 파싱 (YYYY.MM.DD HH:MM or similar)
+                                    // 3일 전 기준
+                                    const dateStr = item.date.replace(/\./g, '-');
+                                    const newsDate = new Date(dateStr);
+                                    const threeDaysAgo = new Date();
+                                    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+                                    return newsDate >= threeDaysAgo;
+                                } catch (e) {
+                                    return true; // 파싱 실패시 일단 표시
+                                }
+                            })
+                            .map((item, index) => (
+                                <Card
+                                    key={index}
+                                    withBorder
+                                    shadow="sm"
+                                    radius="md"
+                                    component="a"
+                                    href={item.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="hover:bg-white/5 transition-colors"
+                                    style={{
+                                        background: 'rgba(255,255,255,0.05)',
+                                        borderColor: 'rgba(255,255,255,0.1)',
+                                        color: 'white'
+                                    }}
+                                >
+                                    <Text size="sm" fw={600} mb="xs" lineClamp={2} c="white">
+                                        {item.title}
                                     </Text>
-                                    <Text size="xs" c="dimmed">
-                                        {item.date}
-                                    </Text>
-                                </Group>
-                            </Card>
-                        ))}
+                                    <Group justify="space-between">
+                                        <Text size="xs" c="dimmed">
+                                            {item.source}
+                                        </Text>
+                                        <Text size="xs" c="dimmed">
+                                            {item.date}
+                                        </Text>
+                                    </Group>
+                                </Card>
+                            ))}
                     </Stack>
                 ) : (
                     <Center h={100}>

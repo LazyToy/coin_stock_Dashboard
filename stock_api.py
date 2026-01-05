@@ -58,136 +58,125 @@ def get_recent_trading_dates(days: int = 7) -> List[str]:
     return dates
 
 
-def get_kospi_top_volume(limit: int = 10) -> Optional[List[dict]]:
-    """
-    코스피 거래량 상위 종목을 조회합니다.
+def get_real_korea_stock_data(market="kospi", limit=10):
+    if not YFINANCE_AVAILABLE:
+        return get_kospi_sample_data(limit) if market == "kospi" else get_kosdaq_sample_data(limit)
+
+    import yfinance as yf
     
-    Returns:
-        list: 거래량 상위 종목 정보
-            - code: 종목코드
-            - name: 종목명
-            - current_price: 현재가
-            - change_rate: 등락률 (%)
-            - trade_volume: 거래량
-            - trade_value: 거래대금 (원)
-    """
-    if not PYKRX_AVAILABLE:
-        return None
+    # Major stocks list for yfinance (Top Market Cap)
+    # yfinance requires .KS for KOSPI, .KQ for KOSDAQ
+    kospi_symbols = [
+        "005930.KS", "000660.KS", "373220.KS", "207940.KS", "005380.KS", 
+        "000270.KS", "068270.KS", "005490.KS", "105560.KS", "035420.KS",
+        "051910.KS", "035720.KS", "006400.KS", "003550.KS", "012330.KS",
+        "028260.KS", "032830.KS", "086790.KS", "011200.KS", "055550.KS",
+        "034020.KS", "003670.KS", "010130.KS", "009150.KS", "015760.KS"
+    ]
     
+    kosdaq_symbols = [
+         "247540.KQ", "086520.KQ", "196170.KQ", "022100.KQ", "066970.KQ",
+         "028300.KQ", "277810.KQ", "263750.KQ", "293490.KQ", "035900.KQ",
+         "041510.KQ", "393890.KQ", "403870.KQ", "214150.KQ", "005290.KQ",
+         "091990.KQ", "039030.KQ", "145020.KQ", "036930.KQ", "000250.KQ"
+    ]
+    
+    symbols = kospi_symbols if market == "kospi" else kosdaq_symbols
+    
+    # Name Mapping (yfinance returns English names usually, we want Korean if possible)
+    name_map = {
+        "005930.KS": "삼성전자", "000660.KS": "SK하이닉스", "373220.KS": "LG에너지솔루션",
+        "207940.KS": "삼성바이오로직스", "005380.KS": "현대차", "000270.KS": "기아",
+        "068270.KS": "셀트리온", "005490.KS": "POSCO홀딩스", "105560.KS": "KB금융",
+        "035420.KS": "NAVER", "051910.KS": "LG화학", "035720.KS": "카카오",
+        "006400.KS": "삼성SDI", "003550.KS": "LG", "012330.KS": "현대모비스",
+        "028260.KS": "삼성물산", "032830.KS": "삼성생명", "086790.KS": "하나금융지주",
+        "011200.KS": "HMM", "055550.KS": "신한지주",
+        "247540.KQ": "에코프로비엠", "086520.KQ": "에코프로", "196170.KQ": "알테오젠",
+        "022100.KQ": "포스코DX", "066970.KQ": "엘앤에프", "028300.KQ": "HLB",
+        "277810.KQ": "휴젤", "263750.KQ": "펄어비스", "293490.KQ": "카카오게임즈",
+        "041510.KQ": "에스엠", "393890.KQ": "더블유씨피", "403870.KQ": "HPSP",
+        "214150.KQ": "클래시스", "005290.KQ": "동진쎄미켐",
+        "091990.KQ": "셀트리온제약", "039030.KQ": "이오테크닉스"
+    }
+
     try:
-        # 최근 거래일 후보 목록
-        dates = get_recent_trading_dates(7)
-        df = None
+        # Batch Fetch
+        tickers = yf.Tickers(" ".join(symbols))
+        data_list = []
         
-        # 데이터가 있는 날짜를 찾을 때까지 시도
-        for date in dates:
+        for sym in symbols:
             try:
-                df = krx.get_market_ohlcv_by_ticker(date, market="KOSPI")
-                if not df.empty:
-                    print(f"코스피 데이터 조회 성공: {date}")
-                    break
-            except Exception:
-                continue
-        
-        if df is None or df.empty:
-            print("코스피 데이터를 찾을 수 없습니다. 샘플 데이터를 사용합니다.")
-            # 샘플 데이터 반환 (pykrx가 작동하지 않을 때)
-            return get_kospi_sample_data(limit)
-        
-        # 거래대금 기준 정렬
-        df = df.sort_values("거래대금", ascending=False)
-        
-        result = []
-        for code in df.head(limit).index:
-            try:
-                name = krx.get_market_ticker_name(code)
-                row = df.loc[code]
+                t = tickers.tickers[sym]
+                # Use fast_info for speed
+                # Note: fast_info API might vary by yfinance version. Safe access.
+                price = None
+                volume = None
+                prev = None
+
+                if hasattr(t, 'fast_info'):
+                    price = t.fast_info.last_price
+                    prev = t.fast_info.previous_close
+                    volume = t.fast_info.last_volume
                 
-                # 등락률 계산
-                if row['시가'] > 0:
-                    change_rate = ((row['종가'] - row['시가']) / row['시가']) * 100
-                else:
-                    change_rate = 0
+                # Fallback to info (slower) or history if fast_info fails/is None
+                if price is None:
+                     hist = t.history(period='1d')
+                     if not hist.empty:
+                         price = hist['Close'].iloc[-1]
+                         volume = hist['Volume'].iloc[-1]
+                         # prev close not in 1d history easily, assume open or try to fetch more
+                         # Just use price for now
+                         if len(hist) > 1:
+                             prev = hist['Close'].iloc[-2]
+                         else:
+                             prev = price # No change info
+
+                if price is None:
+                    continue
+
+                change_rate = 0.0
+                if prev and prev > 0:
+                    change_rate = ((price - prev) / prev) * 100
                 
-                result.append({
-                    'code': code,
-                    'name': name,
-                    'current_price': int(row['종가']),
-                    'change_rate': round(change_rate, 2),
-                    'trade_volume': int(row['거래량']),
-                    'trade_value': int(row['거래대금'])
+                trade_value = price * volume if volume else 0
+                
+                code_pure = sym.split('.')[0]
+                name_kor = name_map.get(sym, sym) # Fallback to symbol if map missing
+                
+                data_list.append({
+                    "code": code_pure,
+                    "name": name_kor,
+                    "current_price": int(price),
+                    "change_rate": round(change_rate, 2),
+                    "trade_volume": int(volume) if volume else 0,
+                    "trade_value": int(trade_value)
                 })
             except Exception as e:
-                print(f"종목 {code} 조회 실패: {e}")
+                # print(f"Error processing {sym}: {e}")
                 continue
+                
+        # Sort by trade_value (active)
+        data_list.sort(key=lambda x: x['trade_value'], reverse=True)
+        return data_list[:limit]
         
-        return result
-    
     except Exception as e:
-        print(f"❌ 코스피 거래량 조회 실패: {e}")
-        return None
+        print(f"yfinance fetch error: {e}")
+        return get_kospi_sample_data(limit) if market == "kospi" else get_kosdaq_sample_data(limit)
+
+
+def get_kospi_top_volume(limit: int = 10) -> Optional[List[dict]]:
+    """
+    코스피 거래량 상위 종목을 조회합니다 (yfinance 기반 실시간).
+    """
+    return get_real_korea_stock_data("kospi", limit)
 
 
 def get_kosdaq_top_volume(limit: int = 10) -> Optional[List[dict]]:
     """
-    코스닥 거래량 상위 종목을 조회합니다.
-    
-    Returns:
-        list: 거래량 상위 종목 정보 (코스피와 동일한 형식)
+    코스닥 거래량 상위 종목을 조회합니다 (yfinance 기반 실시간).
     """
-    if not PYKRX_AVAILABLE:
-        return None
-    
-    try:
-        # 최근 거래일 후보 목록
-        dates = get_recent_trading_dates(7)
-        df = None
-        
-        # 데이터가 있는 날짜를 찾을 때까지 시도
-        for date in dates:
-            try:
-                df = krx.get_market_ohlcv_by_ticker(date, market="KOSDAQ")
-                if not df.empty:
-                    print(f"코스닥 데이터 조회 성공: {date}")
-                    break
-            except Exception:
-                continue
-        
-        if df is None or df.empty:
-            print("코스닥 데이터를 찾을 수 없습니다. 샘플 데이터를 사용합니다.")
-            return get_kosdaq_sample_data(limit)
-        
-        # 거래대금 기준 정렬
-        df = df.sort_values("거래대금", ascending=False)
-        
-        result = []
-        for code in df.head(limit).index:
-            try:
-                name = krx.get_market_ticker_name(code)
-                row = df.loc[code]
-                
-                if row['시가'] > 0:
-                    change_rate = ((row['종가'] - row['시가']) / row['시가']) * 100
-                else:
-                    change_rate = 0
-                
-                result.append({
-                    'code': code,
-                    'name': name,
-                    'current_price': int(row['종가']),
-                    'change_rate': round(change_rate, 2),
-                    'trade_volume': int(row['거래량']),
-                    'trade_value': int(row['거래대금'])
-                })
-            except Exception as e:
-                print(f"종목 {code} 조회 실패: {e}")
-                continue
-        
-        return result
-    
-    except Exception as e:
-        print(f"❌ 코스닥 거래량 조회 실패: {e}")
-        return None
+    return get_real_korea_stock_data("kosdaq", limit)
 
 
 def get_us_top_volume(limit: int = 10) -> Optional[List[dict]]:

@@ -27,6 +27,7 @@ import {
     IconAlertCircle,
     IconRocket,
     IconBuildingSkyscraper,
+    IconChartBar,
 } from "@tabler/icons-react";
 import { DashboardData, StockDashboardData } from "@/types/api";
 import { fetchDashboard, fetchStockDashboard } from "@/utils/api";
@@ -146,72 +147,41 @@ export function Dashboard() {
             }}
         >
             {/* Header */}
-            <AppShell.Header>
+            <AppShell.Header style={{ background: "rgba(0, 0, 0, 0.7)", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", backdropFilter: "blur(20px)" }}>
                 <Container size="xl" h="100%">
-                    <Group justify="space-between" h="100%">
-                        <Group gap="md">
-                            <ThemeIcon
-                                size="xl"
-                                radius="md"
-                                variant="gradient"
-                                gradient={
-                                    viewMode === "crypto"
-                                        ? { from: "violet", to: "grape", deg: 135 }
-                                        : { from: "blue", to: "cyan", deg: 135 }
-                                }
-                            >
-                                {viewMode === "crypto" ? (
-                                    <IconCurrencyBitcoin size={28} />
-                                ) : (
-                                    <IconChartLine size={28} />
-                                )}
+                    <Group justify="space-between" align="center" h="100%">
+                        <Group align="center" gap="sm">
+                            <ThemeIcon size={42} radius="md" variant="gradient" gradient={{ from: '#0A84FF', to: '#5E5CE6' }}>
+                                {viewMode === "crypto" ? <IconCurrencyBitcoin size={24} color="white" /> : <IconChartBar size={24} color="white" />}
                             </ThemeIcon>
                             <Stack gap={0}>
-                                <Title order={2} className="gradient-text">
+                                <Title order={2} style={{ color: '#FFF', fontSize: 22, fontWeight: 700 }}>
                                     {viewMode === "crypto" ? "Crypto Dashboard" : "Stock Dashboard"}
                                 </Title>
-                                <Text size="xs" c="dimmed">
-                                    {viewMode === "crypto"
-                                        ? "암호화폐 포트폴리오 대시보드"
-                                        : "국내외 주식 대시보드"}
-                                </Text>
+                                <Text size="xs" c="dimmed">Real-time Portfolio Tracker</Text>
                             </Stack>
                         </Group>
 
                         <Group gap="md">
-                            {/* View Mode Switcher */}
                             <SegmentedControl
                                 value={viewMode}
-                                onChange={handleViewModeChange}
+                                onChange={(value) => setViewMode(value as "crypto" | "stock")}
                                 data={[
-                                    {
-                                        value: "crypto",
-                                        label: (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px" }}>
-                                                <IconCurrencyBitcoin size={18} />
-                                                <span>비트코인</span>
-                                            </div>
-                                        ),
-                                    },
-                                    {
-                                        value: "stock",
-                                        label: (
-                                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px" }}>
-                                                <IconChartLine size={18} />
-                                                <span>주식</span>
-                                            </div>
-                                        ),
-                                    },
+                                    { label: "Crypto Asset", value: "crypto" },
+                                    { label: "Stock Market", value: "stock" },
                                 ]}
+                                size="md"
+                                radius="xl"
+                                withItemsBorders={false}
+                                style={{
+                                    background: 'rgba(255, 255, 255, 0.1)',
+                                    backdropFilter: 'blur(10px)',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                                }}
                                 styles={{
-                                    root: {
-                                        background: "rgba(255,255,255,0.05)",
-                                        border: "1px solid rgba(255,255,255,0.1)",
-                                        borderRadius: 8,
-                                    },
-                                    label: {
-                                        padding: 0,
-                                    },
+                                    root: { backgroundColor: 'transparent' },
+                                    indicator: { backgroundColor: '#0A84FF', boxShadow: '0 0 15px rgba(10, 132, 255, 0.5)' },
+                                    label: { color: '#86868B', fontWeight: 600, fontSize: 13 },
                                 }}
                             />
 
@@ -259,35 +229,25 @@ export function Dashboard() {
                         <Stack gap="xl">
                             {/* Total Overview */}
                             {/* Total Overview */}
+                            {/* Total Overview Hero */}
                             <Paper
                                 className="glass-card animate-fadeIn"
                                 p="xl"
                                 radius="lg"
                                 style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    background: 'rgba(20, 20, 25, 0.4)' // Slightly darker for contrast
+                                    background: 'linear-gradient(180deg, rgba(30,30,40,0.8) 0%, rgba(20,20,25,0.6) 100%)',
+                                    border: '1px solid rgba(255,255,255,0.1)'
                                 }}
                             >
-                                <Group justify="center" gap="xl">
-                                    <IconRocket size={40} style={{ color: "#0A84FF" }} />
-                                    <Stack gap={0} align="center">
-                                        <Text size="sm" c="dimmed" tt="uppercase" fw={600} style={{ letterSpacing: 1 }}>
-                                            암호화폐 포트폴리오
-                                        </Text>
-                                        <Title order={1} style={{ fontWeight: 800, fontSize: '2rem' }}>
-                                            실시간 대시보드
-                                        </Title>
-                                        <Text size="sm" c="dimmed" mt={4}>
-                                            업비트 & 바이낸스 통합 조회
-                                        </Text>
-                                    </Stack>
-                                    <IconRocket
-                                        size={40}
-                                        style={{ color: "#5E5CE6", transform: "scaleX(-1)" }}
-                                    />
-                                </Group>
+                                <Stack gap="xs" align="center" py="md">
+                                    <Text size="sm" c="dimmed" tt="uppercase" fw={700} style={{ letterSpacing: 2 }}>
+                                        Crypto Portfolio
+                                    </Text>
+                                    <Title order={1} style={{ fontSize: 48, fontWeight: 800, color: '#fff' }}>
+                                        Digital Assets
+                                    </Title>
+                                    <Text c="dimmed">Real-time Upbit & Binance Integration</Text>
+                                </Stack>
                             </Paper>
 
                             {/* Balance Cards */}
@@ -368,35 +328,25 @@ export function Dashboard() {
                         <Stack gap="xl">
                             {/* Stock Overview */}
                             {/* Stock Overview */}
+                            {/* Stock Overview Hero */}
                             <Paper
                                 className="glass-card animate-fadeIn"
                                 p="xl"
                                 radius="lg"
                                 style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    background: 'rgba(20, 20, 25, 0.4)'
+                                    background: 'linear-gradient(180deg, rgba(30,30,40,0.8) 0%, rgba(20,20,25,0.6) 100%)',
+                                    border: '1px solid rgba(255,255,255,0.1)'
                                 }}
                             >
-                                <Group justify="center" gap="xl">
-                                    <IconBuildingSkyscraper size={40} style={{ color: "#30D158" }} />
-                                    <Stack gap={0} align="center">
-                                        <Text size="sm" c="dimmed" tt="uppercase" fw={600} style={{ letterSpacing: 1 }}>
-                                            주식 포트폴리오
-                                        </Text>
-                                        <Title order={1} style={{ fontWeight: 800, fontSize: '2rem' }}>
-                                            실시간 대시보드
-                                        </Title>
-                                        <Text size="sm" c="dimmed" mt={4}>
-                                            코스피 & 코스닥 & 미국 주식 통합 조회
-                                        </Text>
-                                    </Stack>
-                                    <IconChartLine
-                                        size={40}
-                                        style={{ color: "#0A84FF", transform: "scaleX(-1)" }}
-                                    />
-                                </Group>
+                                <Stack gap="xs" align="center" py="md">
+                                    <Text size="sm" c="dimmed" tt="uppercase" fw={700} style={{ letterSpacing: 2 }}>
+                                        Global Markets
+                                    </Text>
+                                    <Title order={1} style={{ fontSize: 48, fontWeight: 800, color: '#fff' }}>
+                                        Stock & ETF
+                                    </Title>
+                                    <Text c="dimmed">KOSPI • KOSDAQ • NASDAQ • S&P 500</Text>
+                                </Stack>
                             </Paper>
 
                             {/* Major Indices */}
@@ -447,6 +397,6 @@ export function Dashboard() {
                 onClose={closeNews}
                 stockName={selectedStock}
             />
-        </AppShell>
+        </AppShell >
     );
 }

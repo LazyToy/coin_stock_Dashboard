@@ -1,7 +1,6 @@
 "use client";
 
-import { Paper, Table, Text, Group, Badge, Stack, Skeleton } from "@mantine/core";
-import { IconTrendingUp, IconTrendingDown, IconFlame } from "@tabler/icons-react";
+import { Paper, Table, Text, Group, Stack, Skeleton } from "@mantine/core";
 import { KoreaStock, USStock } from "@/types/api";
 
 interface StockVolumeTableProps {
@@ -15,31 +14,17 @@ export function StockVolumeTable({ market, stocks, loading, onStockClick }: Stoc
     const isUS = market === "us";
 
     const marketConfig = {
-        kospi: {
-            name: "코스피",
-            gradientClass: "kospi-gradient",
-        },
-        kosdaq: {
-            name: "코스닥",
-            gradientClass: "kosdaq-gradient",
-        },
-        us: {
-            name: "미국 주식",
-            gradientClass: "us-gradient",
-        },
+        kospi: { name: "KOSPI Top 10" },
+        kosdaq: { name: "KOSDAQ Top 10" },
+        us: { name: "US Stocks Top 10" },
     };
 
     const config = marketConfig[market];
 
-    // 통일된 숫자 포맷 - KRW
-    const formatKRW = (num: number) => {
-        return new Intl.NumberFormat("ko-KR").format(Math.round(num));
-    };
-
-    // 거래대금 포맷 - 억 KRW
-    const formatVolumeKRW = (num: number) => {
-        return `${(num / 100000000).toFixed(2)}억`;
-    };
+    const formatKRW = (num: number) => new Intl.NumberFormat("ko-KR").format(Math.round(num));
+    const formatVolumeKRW = (num: number) => `${(num / 100000000).toFixed(1)}억`;
+    const formatUSD = (num: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(num);
+    const formatVolumeUS = (num: number) => num >= 1000000 ? `${(num / 1000000).toFixed(1)}M` : num.toLocaleString();
 
     if (loading) {
         return (
@@ -55,143 +40,81 @@ export function StockVolumeTable({ market, stocks, loading, onStockClick }: Stoc
     }
 
     return (
-        <Paper className="glass-card animate-fadeIn" p="xl" radius="lg">
-            <Stack gap="md">
+        <Paper className="glass-card animate-fadeIn" p="lg" radius="lg">
+            <Stack gap="lg">
                 {/* Header */}
-                <Group justify="space-between" align="center">
-                    <Group gap="xs">
-                        <div
-                            style={{
-                                width: 8,
-                                height: 32,
-                                borderRadius: 4,
-                                background: market === "kospi"
-                                    ? "linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)"
-                                    : market === "kosdaq"
-                                        ? "linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%)"
-                                        : "linear-gradient(135deg, #3498db 0%, #2980b9 100%)",
-                            }}
-                        />
-                        <Text fw={600} size="lg" c="dimmed">
-                            {config.name} 거래량 TOP 10
+                <Group justify="space-between" align="center" mb="xs">
+                    <Stack gap={2}>
+                        <Text fw={600} size="xl" style={{ letterSpacing: '-0.025em' }}>
+                            {config.name}
                         </Text>
-                    </Group>
-                    <IconFlame size={24} style={{ opacity: 0.5, color: "#ff6b6b" }} />
+                        <Text c="dimmed" size="xs">
+                            Most active by volume
+                        </Text>
+                    </Stack>
                 </Group>
 
                 {/* Table */}
                 {stocks && stocks.length > 0 ? (
-                    <Table
-                        striped
-                        highlightOnHover
-                        withTableBorder={false}
-                        styles={{
-                            tr: {
-                                borderBottom: "1px solid rgba(255,255,255,0.05)",
-                            },
-                            th: {
-                                color: "var(--mantine-color-dimmed)",
-                                fontWeight: 500,
-                                fontSize: "0.8rem",
-                            },
-                        }}
-                    >
+                    <Table verticalSpacing="sm" withTableBorder={false} withRowBorders={true}>
                         <Table.Thead>
                             <Table.Tr>
-                                <Table.Th>#</Table.Th>
-                                <Table.Th>종목</Table.Th>
-                                <Table.Th style={{ textAlign: "right" }}>현재가</Table.Th>
-                                <Table.Th style={{ textAlign: "right" }}>변동률</Table.Th>
-                                <Table.Th style={{ textAlign: "right" }}>거래대금</Table.Th>
+                                <Table.Th style={{ paddingLeft: 0 }}>Asset</Table.Th>
+                                <Table.Th style={{ textAlign: "right" }}>Price</Table.Th>
+                                <Table.Th style={{ textAlign: "right", paddingRight: 0 }}>Volume</Table.Th>
                             </Table.Tr>
                         </Table.Thead>
                         <Table.Tbody>
                             {stocks.map((stock, index) => {
-                                let code: string;
-                                let name: string;
-                                let currentPriceKRW: number;
-                                let changeRate: number;
-                                let tradeValueKRW: number;
+                                const name = isUS ? (stock as USStock).symbol : (stock as KoreaStock).name;
+                                const subName = isUS ? (stock as USStock).name : (stock as KoreaStock).code;
+                                const price = isUS ? (stock as USStock).current_price : (stock as KoreaStock).current_price;
+                                const change = isUS ? (stock as USStock).change_rate : (stock as KoreaStock).change_rate;
+                                const volumeStr = isUS
+                                    ? formatVolumeUS((stock as USStock).trade_volume)
+                                    : formatVolumeKRW((stock as KoreaStock).trade_value);
 
-                                if (isUS) {
-                                    const usStock = stock as USStock;
-                                    code = usStock.symbol;
-                                    name = usStock.name;
-                                    currentPriceKRW = usStock.current_price_krw;
-                                    changeRate = usStock.change_rate;
-                                    tradeValueKRW = usStock.trade_value_krw;
-                                } else {
-                                    const krStock = stock as KoreaStock;
-                                    code = krStock.code;
-                                    name = krStock.name;
-                                    currentPriceKRW = krStock.current_price;
-                                    changeRate = krStock.change_rate;
-                                    tradeValueKRW = krStock.trade_value;
-                                }
-
-                                const isPositive = changeRate >= 0;
+                                const displayPrice = isUS ? formatUSD(price) : formatKRW(price);
+                                const isPositive = change >= 0;
 
                                 return (
                                     <Table.Tr
                                         key={index}
-                                        onClick={() => onStockClick && onStockClick(isUS ? `${code} ${name}` : name)}
-                                        style={{ cursor: "pointer", transition: "background-color 0.2s" }}
+                                        style={{ cursor: "pointer" }}
+                                        onClick={() => onStockClick && onStockClick(name)}
                                     >
-                                        {/* 순위 */}
-                                        <Table.Td>
-                                            <Badge
-                                                variant="filled"
-                                                size="sm"
-                                                color={index < 3 ? "violet" : "gray"}
-                                                style={{ minWidth: 28 }}
-                                            >
-                                                {index + 1}
-                                            </Badge>
-                                        </Table.Td>
-
-                                        {/* 종목명 */}
-                                        <Table.Td>
-                                            <Stack gap={0}>
-                                                <Text size="sm" fw={600}>
-                                                    {isUS ? code : name}
-                                                </Text>
-                                                <Text size="xs" c="dimmed">
-                                                    {isUS ? name : code}
-                                                </Text>
-                                            </Stack>
-                                        </Table.Td>
-
-                                        {/* 현재가 - KRW */}
-                                        <Table.Td style={{ textAlign: "right" }}>
-                                            <Text size="sm" fw={500}>
-                                                {formatKRW(currentPriceKRW)} KRW
-                                            </Text>
-                                        </Table.Td>
-
-                                        {/* 변동률 */}
-                                        <Table.Td style={{ textAlign: "right" }}>
-                                            <Group gap={4} justify="flex-end">
-                                                {isPositive ? (
-                                                    <IconTrendingUp size={16} className="price-up" />
-                                                ) : (
-                                                    <IconTrendingDown size={16} className="price-down" />
-                                                )}
-                                                <Text
-                                                    size="sm"
-                                                    fw={600}
-                                                    className={isPositive ? "price-up" : "price-down"}
+                                        <Table.Td style={{ paddingLeft: 0 }}>
+                                            <Group gap="sm">
+                                                <div
+                                                    style={{
+                                                        width: 24,
+                                                        height: 24,
+                                                        background: 'rgba(255, 255, 255, 0.15)',
+                                                        borderRadius: '50%',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        fontSize: 11,
+                                                        fontWeight: 700,
+                                                        color: '#FFF'
+                                                    }}
                                                 >
-                                                    {isPositive ? "+" : ""}
-                                                    {changeRate.toFixed(2)}%
-                                                </Text>
+                                                    {index + 1}
+                                                </div>
+                                                <Stack gap={0}>
+                                                    <Text size="sm" fw={600} c="white">{name}</Text>
+                                                    <Text size="xs" c="dimmed" lineClamp={1} style={{ maxWidth: 100 }}>{subName}</Text>
+                                                </Stack>
                                             </Group>
                                         </Table.Td>
-
-                                        {/* 거래대금 - 억 KRW */}
                                         <Table.Td style={{ textAlign: "right" }}>
-                                            <Text size="sm" c="dimmed">
-                                                {formatVolumeKRW(tradeValueKRW)} KRW
+                                            <Text size="sm" fw={500} c="white">{displayPrice}</Text>
+                                            <Text size="xs" c={isPositive ? "#34C759" : "#FF3B30"} fw={600}>
+                                                {isPositive ? "+" : ""}{change.toFixed(2)}%
                                             </Text>
+                                        </Table.Td>
+                                        <Table.Td style={{ textAlign: "right", paddingRight: 0 }}>
+                                            <Text size="xs" c="dimmed">{volumeStr}</Text>
                                         </Table.Td>
                                     </Table.Tr>
                                 );
@@ -199,9 +122,7 @@ export function StockVolumeTable({ market, stocks, loading, onStockClick }: Stoc
                         </Table.Tbody>
                     </Table>
                 ) : (
-                    <Text c="dimmed" ta="center" py="xl">
-                        거래량 정보를 불러올 수 없습니다
-                    </Text>
+                    <Text c="dimmed" ta="center" py="xl">No data available</Text>
                 )}
             </Stack>
         </Paper>
