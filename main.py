@@ -1,30 +1,88 @@
 """
-암호화폐 자동매매 프로그램 - 메인 모듈
+암호화폐 자동매매 프로그램 - 메인 모듈 (CLI)
 업비트와 바이낸스 API를 통합하여 사용합니다.
+Async refactored using anyio.run
 """
-
-from upbit_api import (
+import anyio
+from backend.services.upbit_api import (
     get_upbit_balance,
     get_upbit_holdings,
-    get_upbit_top_volume_coins,
-    print_upbit_balance,
-    print_upbit_holdings,
-    print_upbit_top_volume
+    get_upbit_top_volume_coins
 )
-
-from binance_api import (
+from backend.services.binance_api import (
     get_binance_balance,
     get_binance_holdings,
-    get_binance_top_volume_coins,
-    print_binance_balance,
-    print_binance_holdings,
-    print_binance_top_volume
+    get_binance_top_volume_coins
 )
+
+# === Print Helper Functions (Restored/Adapted) ===
+
+def print_upbit_balance():
+    async def _run():
+        balance = await get_upbit_balance()
+        if balance:
+            print("\n  [업비트 잔액]")
+            print(f"  총 보유자산: {balance['total_krw']:.0f} KRW")
+            print(f"  사용 가능: {balance['available_krw']:.0f} KRW")
+        else:
+            print("  잔액 정보를 가져올 수 없습니다.")
+    anyio.run(_run)
+
+def print_upbit_holdings():
+    async def _run():
+        holdings = await get_upbit_holdings()
+        if holdings:
+            print(f"\n  [보유 코인] 총 {len(holdings)}개")
+            for item in holdings:
+                print(f"  - {item['coin']}: {item['total']}개 (평가: {item['eval_amount']:.0f} KRW)")
+        else:
+            print("  보유 코인이 없거나 가져올 수 없습니다.")
+    anyio.run(_run)
+
+def print_upbit_top_volume(limit=10):
+    async def _run():
+        coins = await get_upbit_top_volume_coins(limit)
+        if coins:
+            print(f"\n  [업비트 거래량 Top {limit}]")
+            for i, coin in enumerate(coins, 1):
+                print(f"  {i}. {coin['name']} ({coin['market']}): {coin['current_price']:.0f} KRW")
+        else:
+            print("  정보를 가져올 수 없습니다.")
+    anyio.run(_run)
+
+def print_binance_balance():
+    async def _run():
+        balance = await get_binance_balance()
+        if balance:
+            print("\n  [바이낸스 잔액]")
+            print(f"  총 보유: {balance['total_usdt']:.2f} USDT")
+        else:
+            print("  잔액 정보를 가져올 수 없습니다.")
+    anyio.run(_run)
+
+def print_binance_holdings():
+    async def _run():
+        holdings = await get_binance_holdings()
+        if holdings:
+            print(f"\n  [바이낸스 보유] 총 {len(holdings)}개")
+            for item in holdings:
+                print(f"  - {item['symbol']}: {item['total']} (평가: {item['eval_amount']:.2f} USDT)")
+        else:
+            print("  보유 코인이 없습니다.")
+    anyio.run(_run)
+
+def print_binance_top_volume(limit=10):
+    async def _run():
+        coins = await get_binance_top_volume_coins(limit)
+        if coins:
+            print(f"\n  [바이낸스 거래량 Top {limit}]")
+            for i, coin in enumerate(coins, 1):
+                print(f"  {i}. {coin['symbol']}: {coin['current_price']:.2f} USDT (Vol: {coin['quote_volume']:.0f})")
+    anyio.run(_run)
 
 
 def show_all_info():
     """모든 거래소의 정보를 한 번에 조회합니다."""
-    
     print("\n" + "🚀" * 25)
     print("      암호화폐 포트폴리오 대시보드")
     print("🚀" * 25)
@@ -139,4 +197,7 @@ def binance_menu():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n  종료합니다.")

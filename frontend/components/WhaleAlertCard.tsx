@@ -10,7 +10,8 @@ export function WhaleAlertCard({ alerts }: WhaleAlertCardProps) {
     if (!alerts) return null;
 
     // Exchange Icon Mapping (Simple)
-    const getIcon = (name: string) => {
+    const getIcon = (name: string | undefined) => {
+        if (!name) return <IconBuildingBank size={16} />;
         if (name.includes('Wallet')) return <IconWallet size={16} />;
         return <IconBuildingBank size={16} />;
     };
