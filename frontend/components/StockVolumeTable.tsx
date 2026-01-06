@@ -81,7 +81,7 @@ export function StockVolumeTable({ market, stocks, loading, onStockClick }: Stoc
                                     <Table.Tr
                                         key={index}
                                         style={{ cursor: "pointer" }}
-                                        onClick={() => onStockClick && onStockClick(name)}
+                                        onClick={() => onStockClick && onStockClick(isUS ? subName : name)}
                                     >
                                         <Table.Td style={{ paddingLeft: 0 }}>
                                             <Group gap="sm">
@@ -103,7 +103,7 @@ export function StockVolumeTable({ market, stocks, loading, onStockClick }: Stoc
                                                 </div>
                                                 <Stack gap={0}>
                                                     <Text size="sm" fw={600} c="white">{name}</Text>
-                                                    <Text size="xs" c="dimmed" lineClamp={1} style={{ maxWidth: 100 }}>{subName}</Text>
+                                                    <Text size="xs" c="dimmed" lineClamp={1} style={{ minWidth: 120 }}>{subName}</Text>
                                                 </Stack>
                                             </Group>
                                         </Table.Td>

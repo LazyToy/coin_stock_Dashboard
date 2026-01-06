@@ -12,6 +12,7 @@ import yfinance as yf
 import asyncio
 from functools import partial
 from bs4 import BeautifulSoup
+import pandas as pd
 
 # 한국 주식 (Legcay pykrx support removed or kept minimal if needed, but we use yfinance now)
 # 미국 주식
@@ -135,6 +136,32 @@ def _get_real_korea_stock_data_sync(market="kospi", limit=10):
         return []
 
 
+
+# 미국 주식 전체 이름 매핑 (API에서 전체 이름을 못 가져올 경우 대비)
+US_STOCK_NAMES = {
+    # Mag 7 & Tech
+    "NVDA": "NVIDIA Corp", "TSLA": "Tesla Inc", "AAPL": "Apple Inc", "AMD": "Advanced Micro Devices", 
+    "AMZN": "Amazon.com Inc", "MSFT": "Microsoft Corp", "GOOGL": "Alphabet Inc", "META": "Meta Platforms", 
+    "NFLX": "Netflix Inc", "INTC": "Intel Corp", "AVGO": "Broadcom Inc", "QCOM": "Qualcomm Inc", 
+    "ARM": "Arm Holdings", "MU": "Micron Technology",
+    # ETFs
+    "SQQQ": "ProShares UltraPro Short QQQ", "TQQQ": "ProShares UltraPro QQQ", "SOXL": "Direxion Daily Semi Bull 3X", 
+    "SOXS": "Direxion Daily Semi Bear 3X", "QQQ": "Invesco QQQ Trust", "SPY": "SPDR S&P 500 ETF", 
+    "IWM": "iShares Russell 2000 ETF", "ARKK": "ARK Innovation ETF", "JEPI": "JPMorgan Equity Premium", 
+    "SCHD": "Schwab US Dividend Equity", "TLT": "iShares 20+ Year Treasury", "HYG": "iShares iBoxx $ High Yield", 
+    "XLF": "Financial Select Sector SPDR", "LABU": "Direxion Daily Biotech Bull 3X",
+    # Crypto/Meme/Retail
+    "COIN": "Coinbase Global", "MSTR": "MicroStrategy Inc", "MARA": "Marathon Digital", "RIOT": "Riot Platforms", 
+    "CLSK": "CleanSpark Inc", "HOOD": "Robinhood Markets", "GME": "GameStop Corp", "AMC": "AMC Entertainment", 
+    "PLTR": "Palantir Technologies", "SOFI": "SoFi Technologies", "AFRM": "Affirm Holdings", "UPST": "Upstart Holdings",
+    # Auto/Ind
+    "F": "Ford Motor Company", "GM": "General Motors", "BA": "Boeing Company", "GE": "General Electric", "CAT": "Caterpillar Inc",
+    # Bank
+    "BAC": "Bank of America", "JPM": "JPMorgan Chase", "WFC": "Wells Fargo", "C": "Citigroup Inc",
+    # Energy/Pharma
+    "XOM": "Exxon Mobil", "CVX": "Chevron Corp", "PFE": "Pfizer Inc", "MRK": "Merck & Co", "LLY": "Eli Lilly and Company"
+}
+
 def _get_us_top_volume_sync(limit: int = 10) -> Optional[List[dict]]:
     try:
         usd_krw_rate = _get_usd_krw_rate_sync()
@@ -142,69 +169,64 @@ def _get_us_top_volume_sync(limit: int = 10) -> Optional[List[dict]]:
         # Yahoo Finance Screener/Most Actives API is unstable (502/Blocked).
         # Alternative: Scan a comprehensive list of popular active stocks/ETFs.
         # This ensures reliability while still providing "Real-time" volume ranking.
-        target_symbols = [
-            # Mag 7 & Tech
-            "NVDA", "TSLA", "AAPL", "AMD", "AMZN", "MSFT", "GOOGL", "META", "NFLX", "INTC", "AVGO", "QCOM", "ARM", "MU",
-            # Popular ETFs (Leveraged/Inverse often high volume)
-            "SQQQ", "TQQQ", "SOXL", "SOXS", "QQQ", "SPY", "IWM", "ARKK", "JEPI", "SCHD", "TLT", "HYG", "XLF", "LABU",
-            # Crypto/Meme/Retail
-            "COIN", "MSTR", "MARA", "RIOT", "CLSK", "HOOD", "GME", "AMC", "PLTR", "SOFI", "AFRM", "UPST",
-            # Major Autos & Industrials
-            "F", "GM", "BA", "GE", "CAT",
-            # Banking
-            "BAC", "JPM", "WFC", "C",
-            # Energy/Pharma
-            "XOM", "CVX", "PFE", "MRK", "LLY"
-        ]
+        target_symbols = list(US_STOCK_NAMES.keys())
         
-        # Add more logic to fetch data using yf.Tickers
-        tickers = yf.Tickers(" ".join(target_symbols))
+        # Optimize: Fetch all data in one go using batch download
+        # period="1d", group_by='ticker' ensures we get a structure we can iterate easily
+        # threads=True is default but explicit is good
+        try:
+            df = yf.download(target_symbols, period="1d", group_by='ticker', progress=False, threads=True)
+        except Exception as e:
+            print(f"Batch download failed: {e}")
+            return []
+
         stocks_data = []
         
         for symbol in target_symbols:
             try:
-                t = tickers.tickers[symbol]
+                # Handle MultiIndex DataFrame from yf.download
+                if len(target_symbols) > 1:
+                    # If multiple tickers, df has top level column as ticker
+                    ticker_data = df[symbol]
+                else:
+                    # If single ticker (unlikely here but safe), no top level
+                    ticker_data = df
+
+                if ticker_data.empty:
+                    continue
+
+                # Get latest row
+                latest = ticker_data.iloc[-1]
                 
-                # Fast info access
-                current_price = None
-                volume = None
-                prev_close = None
-                name = symbol # fallback
+                # Check for NaNs
+                if pd.isna(latest['Close']) or pd.isna(latest['Volume']):
+                    continue
+
+                current_price = float(latest['Close'])
+                volume = int(latest['Volume'])
+                open_price = float(latest['Open'])
                 
-                if hasattr(t, 'fast_info'):
-                     try:
-                         current_price = t.fast_info.last_price
-                         volume = t.fast_info.last_volume
-                         prev_close = t.fast_info.previous_close
-                     except:
-                         pass
+                # Calculate change from Open of the day
+                change_rate = 0.0
+                if open_price > 0:
+                    change_rate = ((current_price - open_price) / open_price) * 100
+                    
+                trade_value = current_price * volume
                 
-                if current_price is None:
-                    # History fallback
-                    hist = t.history(period="1d")
-                    if not hist.empty:
-                        current_price = hist['Close'].iloc[-1]
-                        volume = hist['Volume'].iloc[-1]
-                        prev_close = hist['Open'].iloc[-1] # Approx or fetch previous
+                # Use mapped name if available, else symbol
+                full_name = US_STOCK_NAMES.get(symbol, symbol)
                 
-                if current_price is not None and volume is not None:
-                     change_rate = 0.0
-                     if prev_close:
-                         change_rate = ((current_price - prev_close) / prev_close) * 100
-                         
-                     trade_value = current_price * volume
-                     
-                     stocks_data.append({
-                        'symbol': symbol,
-                        'name': name,
-                        'current_price': round(float(current_price), 2),
-                        'change_rate': round(float(change_rate), 2),
-                        'trade_volume': int(volume),
-                        'trade_value': round(trade_value, 2),
-                        'current_price_krw': round(float(current_price) * usd_krw_rate),
-                        'trade_value_krw': round(trade_value * usd_krw_rate)
-                    })
-            except:
+                stocks_data.append({
+                    'symbol': symbol,
+                    'name': full_name,
+                    'current_price': round(current_price, 2),
+                    'change_rate': round(change_rate, 2),
+                    'trade_volume': volume,
+                    'trade_value': round(trade_value, 2),
+                    'current_price_krw': round(current_price * usd_krw_rate),
+                    'trade_value_krw': round(trade_value * usd_krw_rate)
+                })
+            except Exception:
                 continue
                 
         # Sort by Volume (Most Active)
@@ -326,7 +348,28 @@ def _get_sector_performance_sync() -> List[dict]:
 
 def _get_stock_news_sync(query: str, limit: int = 5) -> List[dict]:
     try:
-        encoded_query = quote(query)
+        # Resolve Symbol to Full Name for better news results dynamically
+        search_query = query
+        try:
+            # Check if query looks like a ticker (e.g. "NVDA", "AAPL")
+            # If we just removed the mapping, we need another way?
+            # Or we just assume if it's 3-5 chars it might be a ticker.
+            # Let's try to fetch name via yf.Ticker for ANY query.
+            # This is slow if we do it for list, but for single search it's okay.
+            ticker = yf.Ticker(query)
+            # info property triggers a network request
+            info = ticker.info 
+            if 'shortName' in info:
+                search_query = info['shortName']
+            elif 'longName' in info:
+                search_query = info['longName']
+                
+        except Exception as e:
+            # Just log and fallback to original query
+            print(f"Failed to resolve company name for {query}: {e}")
+            pass
+        
+        encoded_query = quote(search_query)
         url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
@@ -485,7 +528,7 @@ async def get_sector_performance():
 async def get_etf_top_volume(market="us", limit=10):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, partial(_get_etf_top_volume_sync, market, limit))
-    
+
 async def get_stock_news(query):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, partial(_get_stock_news_sync, query))
