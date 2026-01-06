@@ -251,28 +251,30 @@ async def dashboard():
         # Balance & Holdings & Rate
         # We need rate for Binance Top Volume calculation
         usdt_krw = await get_usdt_krw_rate()
-
-        future_up_bal = asyncio.create_task(get_upbit_balance())
-        future_up_hold = asyncio.create_task(get_upbit_holdings())
-        future_bn_bal = asyncio.create_task(get_binance_balance())
-        future_bn_hold = asyncio.create_task(get_binance_holdings())
         
-        # Top Volume
-        future_up_top = asyncio.create_task(get_upbit_top_volume_coins(10)) 
-        future_bn_top = asyncio.create_task(get_binance_top_volume_coins(10, usdt_krw))
+        # Asyncio Gather for parallel execution
+        # Results order: up_bal, up_hold, bn_bal, bn_hold, up_top, bn_top, fg, whale
+        results = await asyncio.gather(
+            get_upbit_balance(),
+            get_upbit_holdings(),
+            get_binance_balance(),
+            get_binance_holdings(),
+            get_upbit_top_volume_coins(10),
+            get_binance_top_volume_coins(10, usdt_krw),
+            get_crypto_fear_greed(),
+            get_whale_alerts(5),
+            return_exceptions=True
+        )
         
-        # Others
-        future_fg = asyncio.create_task(get_crypto_fear_greed())
-        future_whale = asyncio.create_task(get_whale_alerts(5))
-        
-        up_bal = await future_up_bal
-        up_hold = await future_up_hold
-        bn_bal = await future_bn_bal
-        bn_hold = await future_bn_hold
-        up_top = await future_up_top
-        bn_top = await future_bn_top
-        fg = await future_fg
-        whale = await future_whale
+        # Unpack results, handling exceptions if any (basic None fallback)
+        up_bal = results[0] if not isinstance(results[0], Exception) else None
+        up_hold = results[1] if not isinstance(results[1], Exception) else None
+        bn_bal = results[2] if not isinstance(results[2], Exception) else None
+        bn_hold = results[3] if not isinstance(results[3], Exception) else None
+        up_top = results[4] if not isinstance(results[4], Exception) else None
+        bn_top = results[5] if not isinstance(results[5], Exception) else None
+        fg = results[6] if not isinstance(results[6], Exception) else None
+        whale = results[7] if not isinstance(results[7], Exception) else None
         
         return DashboardData(
             upbit_balance=UpbitBalance(**up_bal) if up_bal else None,

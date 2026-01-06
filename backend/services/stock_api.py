@@ -11,6 +11,7 @@ from anyio import to_thread
 import yfinance as yf
 import asyncio
 from functools import partial
+from bs4 import BeautifulSoup
 
 # 한국 주식 (Legcay pykrx support removed or kept minimal if needed, but we use yfinance now)
 # 미국 주식
@@ -51,159 +52,168 @@ def get_recent_trading_dates(days: int = 7) -> List[str]:
 
 
 def _get_real_korea_stock_data_sync(market="kospi", limit=10):
-    kospi_symbols = [
-        "005930.KS", "000660.KS", "373220.KS", "207940.KS", "005380.KS", 
-        "000270.KS", "068270.KS", "005490.KS", "105560.KS", "035420.KS",
-        "051910.KS", "035720.KS", "006400.KS", "003550.KS", "012330.KS",
-        "028260.KS", "032830.KS", "086790.KS", "011200.KS", "055550.KS",
-        "034020.KS", "003670.KS", "010130.KS", "009150.KS", "015760.KS"
-    ]
-    kosdaq_symbols = [
-         "247540.KQ", "086520.KQ", "196170.KQ", "022100.KQ", "066970.KQ",
-         "028300.KQ", "277810.KQ", "263750.KQ", "293490.KQ", "035900.KQ",
-         "041510.KQ", "393890.KQ", "403870.KQ", "214150.KQ", "005290.KQ",
-         "091990.KQ", "039030.KQ", "145020.KQ", "036930.KQ", "000250.KQ"
-    ]
-    symbols = kospi_symbols if market == "kospi" else kosdaq_symbols
-    
-    name_map = {
-        "005930.KS": "삼성전자", "000660.KS": "SK하이닉스", "373220.KS": "LG에너지솔루션",
-        "207940.KS": "삼성바이오로직스", "005380.KS": "현대차", "000270.KS": "기아",
-        "068270.KS": "셀트리온", "005490.KS": "POSCO홀딩스", "105560.KS": "KB금융",
-        "035420.KS": "NAVER", "051910.KS": "LG화학", "035720.KS": "카카오",
-        "006400.KS": "삼성SDI", "003550.KS": "LG", "012330.KS": "현대모비스",
-        "028260.KS": "삼성물산", "032830.KS": "삼성생명", "086790.KS": "하나금융지주",
-        "011200.KS": "HMM", "055550.KS": "신한지주",
-        "247540.KQ": "에코프로비엠", "086520.KQ": "에코프로", "196170.KQ": "알테오젠",
-        "022100.KQ": "포스코DX", "066970.KQ": "엘앤에프", "028300.KQ": "HLB",
-        "277810.KQ": "휴젤", "263750.KQ": "펄어비스", "293490.KQ": "카카오게임즈",
-        "041510.KQ": "에스엠", "393890.KQ": "더블유씨피", "403870.KQ": "HPSP",
-        "214150.KQ": "클래시스", "005290.KQ": "동진쎄미켐",
-        "091990.KQ": "셀트리온제약", "039030.KQ": "이오테크닉스"
-    }
-
+    """
+    네이버 금융 거래상위 페이지 크롤링하여 실시간 거래량 상위 종목 조회
+    market: "kospi" or "kosdaq"
+    """
     try:
-        tickers = yf.Tickers(" ".join(symbols))
+        sosok = "0" if market == "kospi" else "1"
+        url = f"https://finance.naver.com/sise/sise_quant.naver?sosok={sosok}"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code != 200:
+            return []
+            
+        # Naver Finance uses EUC-KR
+        soup = BeautifulSoup(response.content.decode('euc-kr', 'replace'), 'html.parser')
+        
+        table = soup.select_one('table.type_2')
+        if not table:
+            return []
+            
+        rows = table.find_all('tr')
         data_list = []
-        for sym in symbols:
-            try:
-                t = tickers.tickers[sym]
-                price = None
-                volume = None
-                prev = None
-
-                # fast_info access
-                if hasattr(t, 'fast_info'):
-                    try:
-                        price = t.fast_info.last_price
-                        prev = t.fast_info.previous_close
-                        volume = t.fast_info.last_volume
-                    except:
-                        pass
+        
+        count = 0
+        for row in rows:
+            if count >= limit:
+                break
                 
-                # Fallback to history
-                if price is None:
-                     hist = t.history(period='1d')
-                     if not hist.empty:
-                         price = hist['Close'].iloc[-1]
-                         volume = hist['Volume'].iloc[-1]
-                         if len(hist) > 1:
-                             prev = hist['Close'].iloc[-2]
-                         else:
-                             prev = price 
-
-                if price is None:
-                    continue
-
-                change_rate = 0.0
-                if prev and prev > 0:
-                    change_rate = ((price - prev) / prev) * 100
-                
-                trade_value = price * volume if volume else 0
-                code_pure = sym.split('.')[0]
-                name_kor = name_map.get(sym, sym)
-                
-                data_list.append({
-                    "code": code_pure,
-                    "name": name_kor,
-                    "current_price": int(price),
-                    "change_rate": round(change_rate, 2),
-                    "trade_volume": int(volume) if volume else 0,
-                    "trade_value": int(trade_value)
-                })
-            except:
+            cols = row.find_all('td')
+            # Valid rows have 'no' class in first column and enough columns
+            if len(cols) < 10 or not cols[0].text.strip().isdigit():
                 continue
                 
-        data_list.sort(key=lambda x: x['trade_value'], reverse=True)
-        return data_list[:limit]
+            try:
+                # Column check:
+                # 0: no, 1: name(a tag), 2: current_price, 3: diff(icon/span), 4: change rate, 5: volume, 6: trade value estimate...
+                
+                name_tag = cols[1].find('a')
+                if not name_tag:
+                    continue
+                    
+                name_kor = name_tag.text.strip()
+                code = name_tag['href'].split('code=')[-1].strip()
+                
+                price_text = cols[2].text.strip().replace(',', '')
+                if not price_text.isdigit(): continue
+                current_price = int(price_text)
+                
+                # Check previous price to calculate real change rate if needed, or use the one in table
+                # Table Col 4 (index 4) is Change Rate (e.g. +1.23%)
+                rate_text = cols[4].text.strip().replace('%', '').replace('+', '')
+                change_rate = float(rate_text)
+                
+                volume_text = cols[5].text.strip().replace(',', '')
+                trade_volume = int(volume_text)
+                
+                # Trade Value: Naver gives it in Millions usually. 
+                # Let's calculate: price * volume for consistency with previous logic, 
+                # or use column 6 (check unit). Column 6 is 'Transaction Amount (Million)'.
+                trade_value = current_price * trade_volume
+                
+                data_list.append({
+                    "code": code,
+                    "name": name_kor,
+                    "current_price": current_price,
+                    "change_rate": change_rate,
+                    "trade_volume": trade_volume,
+                    "trade_value": trade_value
+                })
+                count += 1
+            except Exception as e:
+                continue
+                
+        return data_list
+        
     except Exception as e:
-        print(f"yfinance fetch error: {e}")
+        print(f"Korean stock fetch error: {e}")
         return []
 
 
 def _get_us_top_volume_sync(limit: int = 10) -> Optional[List[dict]]:
     try:
-        major_symbols = [
-            "NVDA", "TSLA", "AAPL", "AMD", "AMZN", 
-            "META", "MSFT", "GOOGL", "NFLX", "INTC",
-            "PLTR", "COIN", "MARA", "RIOT", "BA",
-            "JPM", "BAC", "WFC", "C", "GS",
-            "XOM", "CVX", "PFE", "JNJ", "UNH"
+        usd_krw_rate = _get_usd_krw_rate_sync()
+        
+        # Yahoo Finance Screener/Most Actives API is unstable (502/Blocked).
+        # Alternative: Scan a comprehensive list of popular active stocks/ETFs.
+        # This ensures reliability while still providing "Real-time" volume ranking.
+        target_symbols = [
+            # Mag 7 & Tech
+            "NVDA", "TSLA", "AAPL", "AMD", "AMZN", "MSFT", "GOOGL", "META", "NFLX", "INTC", "AVGO", "QCOM", "ARM", "MU",
+            # Popular ETFs (Leveraged/Inverse often high volume)
+            "SQQQ", "TQQQ", "SOXL", "SOXS", "QQQ", "SPY", "IWM", "ARKK", "JEPI", "SCHD", "TLT", "HYG", "XLF", "LABU",
+            # Crypto/Meme/Retail
+            "COIN", "MSTR", "MARA", "RIOT", "CLSK", "HOOD", "GME", "AMC", "PLTR", "SOFI", "AFRM", "UPST",
+            # Major Autos & Industrials
+            "F", "GM", "BA", "GE", "CAT",
+            # Banking
+            "BAC", "JPM", "WFC", "C",
+            # Energy/Pharma
+            "XOM", "CVX", "PFE", "MRK", "LLY"
         ]
         
-        usd_krw_rate = _get_usd_krw_rate_sync()
+        # Add more logic to fetch data using yf.Tickers
+        tickers = yf.Tickers(" ".join(target_symbols))
         stocks_data = []
         
-        tickers = yf.Tickers(" ".join(major_symbols))
-        
-        for symbol in major_symbols:
+        for symbol in target_symbols:
             try:
-                ticker = tickers.tickers[symbol]
+                t = tickers.tickers[symbol]
                 
-                # using fast_info for speed
+                # Fast info access
                 current_price = None
-                prev_close = None
                 volume = None
-                name = symbol
+                prev_close = None
+                name = symbol # fallback
                 
-                if hasattr(ticker, 'fast_info'):
-                    try:
-                        current_price = ticker.fast_info.last_price
-                        prev_close = ticker.fast_info.previous_close
-                        volume = ticker.fast_info.last_volume
-                    except:
+                if hasattr(t, 'fast_info'):
+                     try:
+                         current_price = t.fast_info.last_price
+                         volume = t.fast_info.last_volume
+                         prev_close = t.fast_info.previous_close
+                     except:
                          pass
-
+                
                 if current_price is None:
-                    # Fallback
-                    info = ticker.info
-                    current_price = info.get('currentPrice') or info.get('regularMarketPrice')
-                    prev_close = info.get('previousClose') or info.get('regularMarketPreviousClose')
-                    volume = info.get('volume') or info.get('regularMarketVolume')
-                    name = info.get('shortName') or info.get('longName', symbol)
-
-                if current_price and prev_close and volume:
-                    change_rate = ((current_price - prev_close) / prev_close) * 100
-                    trade_value = current_price * volume
-                    
-                    stocks_data.append({
+                    # History fallback
+                    hist = t.history(period="1d")
+                    if not hist.empty:
+                        current_price = hist['Close'].iloc[-1]
+                        volume = hist['Volume'].iloc[-1]
+                        prev_close = hist['Open'].iloc[-1] # Approx or fetch previous
+                
+                if current_price is not None and volume is not None:
+                     change_rate = 0.0
+                     if prev_close:
+                         change_rate = ((current_price - prev_close) / prev_close) * 100
+                         
+                     trade_value = current_price * volume
+                     
+                     stocks_data.append({
                         'symbol': symbol,
                         'name': name,
-                        'current_price': round(current_price, 2),
-                        'change_rate': round(change_rate, 2),
+                        'current_price': round(float(current_price), 2),
+                        'change_rate': round(float(change_rate), 2),
                         'trade_volume': int(volume),
                         'trade_value': round(trade_value, 2),
-                        'current_price_krw': round(current_price * usd_krw_rate),
+                        'current_price_krw': round(float(current_price) * usd_krw_rate),
                         'trade_value_krw': round(trade_value * usd_krw_rate)
                     })
             except:
                 continue
-        
-        stocks_data.sort(key=lambda x: x['trade_value'], reverse=True)
+                
+        # Sort by Volume (Most Active)
+        stocks_data.sort(key=lambda x: x['trade_volume'], reverse=True)
         return stocks_data[:limit]
+
     except Exception as e:
         print(f"❌ 미국 주식 거래량 조회 실패: {e}")
-        return None
+        return []
 
 
 def _get_major_indices_sync() -> List[dict]:
@@ -241,15 +251,77 @@ def _get_major_indices_sync() -> List[dict]:
 
 
 def _get_sector_performance_sync() -> List[dict]:
-    # Dummy implementation for sectors as crawling is hard
-    return [
-        {"name": "반도체", "change_rate": 2.5, "volume": "강세"},
-        {"name": "2차전지", "change_rate": -1.2, "volume": "약세"},
-        {"name": "자동차", "change_rate": 1.8, "volume": "강세"},
-        {"name": "헬스케어", "change_rate": -0.5, "volume": "보합"},
-        {"name": "인터넷/게임", "change_rate": 0.3, "volume": "보합"},
-        {"name": "은행/금융", "change_rate": 1.1, "volume": "강세"},
-    ]
+    """
+    네이버 금융 섹터별 시세 (업종별 시세) 크롤링
+    """
+    try:
+        url = "https://finance.naver.com/sise/sise_group.naver?type=upjong"
+        # Naver requires headers
+        headers = {
+             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        res = requests.get(url, headers=headers, timeout=5)
+        if res.status_code != 200:
+             return []
+             
+        # EUC-KR decode
+        soup = BeautifulSoup(res.content.decode('euc-kr', 'replace'), 'html.parser')
+        
+        table = soup.select_one('table.type_1')
+        if not table:
+            return []
+            
+        rows = table.find_all('tr')
+        sectors = []
+        
+        for row in rows:
+            cols = row.find_all('td')
+            if len(cols) < 2: 
+                continue
+            
+            # Col 0: Name (with Link)
+            # Col 1: Change Rate (span)
+            
+            name_tag = cols[0].find('a')
+            if not name_tag:
+                continue
+                
+            name = name_tag.text.strip()
+            
+            change_tag = cols[1].find('span')
+            if not change_tag:
+                continue
+                
+            change_text = change_tag.text.strip().replace('%', '').replace('+', '')
+            try:
+                change_rate = float(change_text)
+            except:
+                change_rate = 0.0
+            
+            # Naver format: 
+            # If + : red, If -: blue.
+            # We just need the float.
+            
+            volume_label = "강세" if change_rate > 1.0 else ("약세" if change_rate < -1.0 else "보합")
+            
+            sectors.append({
+                "name": name,
+                "change_rate": change_rate,
+                "volume": volume_label # reusing 'volume' field for trend label
+            })
+            
+        # Optional: return top 3 and bottom 3? Or just top 10?
+        # User asked for "Sector fluctuation status".
+        # Let's return Top 5 and Bottom 5 wrapped or just list sorted by change?
+        # Typically "Performance" implies ranking.
+        # Let's sort by change rate descending.
+        sectors.sort(key=lambda x: x['change_rate'], reverse=True)
+        
+        return sectors[:10] # Return Top 10 hottest sectors
+        
+    except Exception as e:
+        print(f"Sector scraping failed: {e}")
+        return []
 
 
 def _get_stock_news_sync(query: str, limit: int = 5) -> List[dict]:

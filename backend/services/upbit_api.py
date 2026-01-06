@@ -6,6 +6,7 @@ import pyupbit
 from typing import Optional
 from backend.services.config import UPBIT_ACCESS_KEY, UPBIT_SECRET_KEY, validate_upbit_keys
 from anyio import to_thread
+import requests
 
 def _get_upbit_client_sync() -> Optional[pyupbit.Upbit]:
     if not validate_upbit_keys():
@@ -126,9 +127,9 @@ def _get_upbit_top_volume_coins_sync(limit: int = 10) -> Optional[list]:
         top_coins = []
         
         for item in sorted_data[:limit]:
-            # map contains tuple or dict? let's change map to store dict
-            # or just (ko, en)
-            names = name_map.get(code, {"korean_name": symbol, "english_name": symbol})
+            code = item['market']
+            # lookup name
+            names = name_map.get(code, {"korean_name": code, "english_name": code})
             korean_name = names["korean_name"]
             english_name = names["english_name"]
             
